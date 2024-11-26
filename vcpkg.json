@@ -1,0 +1,9 @@
+{
+  "dependencies": [
+    "boost-asio",
+    "boost-coroutine2",
+    "curl",
+    "spdlog",
+    "fmt"
+  ]
+}
