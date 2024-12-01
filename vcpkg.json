@@ -1,9 +1,15 @@
 {
   "dependencies": [
     "boost-asio",
-    "boost-coroutine2",
     "curl",
+    "fmt",
+    "re2",
     "spdlog",
-    "fmt"
+    {
+      "name": "aws-sdk-cpp",
+      "features": [
+        "s3"
+      ]
+    }
   ]
 }
