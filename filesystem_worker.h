@@ -8,7 +8,7 @@
 #include "s3_worker.h"
 
 namespace fs = std::filesystem;
-static struct FilesystemWorker
+struct FilesystemWorker
 {
 	static bool scaner_dirs(const std::function<void(const GroupTask&)>& func,const TaskParams&);
 	static bool fs_to_fs(const SimpleTask& task, const bool& only_move);

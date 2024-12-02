@@ -56,7 +56,7 @@ long FtpWorker::file_is_coming(struct curl_fileinfo* finfo, struct callback_data
     return CURL_CHUNK_BGN_FUNC_SKIP;
 }
 
-bool FtpWorker::recursiv_list_FTP(CURL* curl, CURLcode& res, const std::string& base_url, std::string subfolder, const std::function<void(const GroupTask&)>& func, const TaskParams& dir)
+bool FtpWorker::recursiv_list_FTP(CURL* curl, CURLcode& res, const std::string& base_url, std::string subfolder, const std::function<void(const GroupTask&)>& func, const TaskParams& dir, int& round_robin, std::optional<RE2>& mask_re2)
 {
     callback_data current;
 
@@ -78,11 +78,25 @@ bool FtpWorker::recursiv_list_FTP(CURL* curl, CURLcode& res, const std::string& 
         if (info.type == CURLFILETYPE_FILE)
         {
             fs::path unesape_file = fs::u8path(subfolder + info.name);
+            if (dir.from.mask.has_value() && !RE2::FullMatch(unesape_file.filename().u8string(), mask_re2.value()))
+            {
+                continue;
+            }
+
             fs::path relative_path = fs::relative(unesape_file, dir.from.path);
+            auto replace_filename = [&](const UrlParams& p) {
+                if (dir.from.mask.has_value() && p.mask.has_value())
+                {
+                    auto filename = relative_path.filename().u8string();
+                    RE2::Replace(&filename, mask_re2.value(), p.mask.value());
+                    relative_path.replace_filename(fs::u8path(filename));
+                }
+                };
             GroupTask group_task(dir.id);
             if (dir.to.size() == 1)
             {
                 group_task.set_file_mode(FileMode::ONLY_MOVE);
+                replace_filename(dir.to.back());
                 group_task.push_task(dir.from, dir.to.back(), relative_path, unesape_file);
                 //current.queue_info.pop();
 
@@ -91,12 +105,16 @@ bool FtpWorker::recursiv_list_FTP(CURL* curl, CURLcode& res, const std::string& 
             {
                 for (const auto& path_to : dir.to) {
                     group_task.set_file_mode(FileMode::BALANCER);
-                    group_task.push_task(dir.from, dir.to.back(), relative_path, unesape_file);
+                    round_robin %= dir.to.size();
+                    replace_filename(dir.to.at(round_robin));
+                    group_task.push_task(dir.from, dir.to.at(round_robin), relative_path, unesape_file);
+                    ++round_robin;
                 }
             }
             else {
                 for (const auto& path_to : dir.to) {
                     group_task.set_file_mode(FileMode::COPY);
+                    replace_filename(path_to);
                     group_task.push_task(dir.from, path_to, relative_path, unesape_file);
                 }
                 // copyNode.try_put(group_task);
@@ -107,7 +125,7 @@ bool FtpWorker::recursiv_list_FTP(CURL* curl, CURLcode& res, const std::string& 
         else if (info.type == CURLFILETYPE_DIRECTORY)
         {
             if (dir.recursiv)
-                recursiv_list_FTP(curl, res, base_url, subfolder + current.queue_info.front().name + "/", func,dir);
+                recursiv_list_FTP(curl, res, base_url, subfolder + current.queue_info.front().name + "/", func,dir, round_robin,mask_re2);
 
         }
         current.queue_info.pop();
@@ -126,8 +144,20 @@ bool FtpWorker::scaner_FTP(const std::function<void(const GroupTask&)>& func, co
         curl_easy_setopt(curl, CURLOPT_WILDCARDMATCH, 1L);
         curl_easy_setopt(curl, CURLOPT_USERPWD, (dir.from.ftp_user_password.value_or("anonimus:anonimus").data())); // Авторизация на FTP
         curl_easy_setopt(curl, CURLOPT_CHUNK_BGN_FUNCTION, file_is_coming);
+
+        std::optional<RE2> mask_re2;
+        if (dir.from.mask.has_value())
+        {
+            mask_re2.emplace(dir.from.mask.value());
+            if (!mask_re2.value().ok())
+            {
+                spdlog::error("Error regular expression in {}: {}", dir.from.mask.value(), mask_re2.value().error());
+                return false;
+            }
+        }
+        auto round_robin = 0;
         // Выполнение запроса
-        if (!recursiv_list_FTP(curl, res, url, dir.from.path.u8string(), func,dir))
+        if (!recursiv_list_FTP(curl, res, url, dir.from.path.u8string(), func,dir, round_robin,mask_re2))
         {
             curl_easy_cleanup(curl);
             return false;

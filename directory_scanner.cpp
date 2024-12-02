@@ -7,7 +7,7 @@ void DirectoryScanner::process_file(const GroupTask& gr_task) {
 
     for (const auto& task : gr_task.m_group_task) {
         io_.post([this, task, pending_operations, only_move = gr_task.m_file_mode == FileMode::ONLY_MOVE ? true : false]() {
-
+            auto status = false;
             switch (task.m_from.protocol)
             {
             case Protocol::DIR:
@@ -16,17 +16,17 @@ void DirectoryScanner::process_file(const GroupTask& gr_task) {
                 {
                 case Protocol::DIR:
                 {
-                    FilesystemWorker::fs_to_fs(task, only_move);
+                    status=FilesystemWorker::fs_to_fs(task, only_move);
                 }
                 break;
                 case Protocol::FTP:
                 {
-                    FilesystemWorker::fs_to_ftp(task, only_move);
+                    status=FilesystemWorker::fs_to_ftp(task, only_move);
                 }
                 break;
                 case Protocol::S3:
                 {
-                    FilesystemWorker::fs_to_s3(task, only_move);
+                    status=FilesystemWorker::fs_to_s3(task, only_move);
                 }
                 break;
                 }
@@ -38,17 +38,17 @@ void DirectoryScanner::process_file(const GroupTask& gr_task) {
                 {
                 case Protocol::DIR:
                 {
-                    FtpWorker::ftp_to_dir(task, only_move);
+                    status=FtpWorker::ftp_to_dir(task, only_move);
                 }
                 break;
                 case Protocol::FTP:
                 {
-                    FtpWorker::ftp_to_ftp(task, only_move);
+                    status=FtpWorker::ftp_to_ftp(task, only_move);
                 }
                 break;
                 case Protocol::S3:
                 {
-                    FtpWorker::ftp_to_s3(task, only_move);
+                    status=FtpWorker::ftp_to_s3(task, only_move);
                 }
                 break;
                 }
@@ -60,25 +60,28 @@ void DirectoryScanner::process_file(const GroupTask& gr_task) {
                 {
                 case Protocol::DIR:
                 {
-                    S3Worker::s3_to_fs(task, only_move);
+                    status=S3Worker::s3_to_fs(task, only_move);
                 }
                 break;
                 case Protocol::FTP:
                 {
-                    S3Worker::s3_to_ftp(task, only_move);
+                    status=S3Worker::s3_to_ftp(task, only_move);
                 }
                 break;
 
                 case Protocol::S3:
                 {
-                    S3Worker::s3_to_s3(task, only_move);
+                    status=S3Worker::s3_to_s3(task, only_move);
                 }
                 break;
                 }
             }
             break;
             }
-
+            if (!status)
+                monitor[task.m_id]->error++;
+            else
+                monitor[task.m_id]->sucsess++;
             if (--(*pending_operations) == 0) {
                 if (!only_move)
                     delete_file(task);
@@ -125,7 +128,7 @@ void DirectoryScanner::check_completion(const size_t& id) {
     }
 }
 void DirectoryScanner::schedule_scan(const size_t& id) {
-    timer_[id]->expires_after(interval_);
+    timer_[id]->expires_after(10s);
     timer_[id]->async_wait([this, id](const boost::system::error_code& ec) {
         if (!ec) {
             scan_directories(id);
@@ -142,32 +145,48 @@ void DirectoryScanner::scan_directories(const size_t& id) {
         
         if (dir.id != id)
             continue;
+        auto status = false;
         spdlog::trace("Starting directory  scan id:{} path: {}", id, dir.from.path.u8string());
+        monitor[id]->is_run.exchange(true);
         switch (dir.from.protocol)
         {
         case Protocol::DIR:
         {
-            FilesystemWorker::scaner_dirs([this](const GroupTask& gr_task) {
+            status=FilesystemWorker::scaner_dirs([this](const GroupTask& gr_task) {
                 this->process_file(gr_task);
                 }, dir);
         }
         break;
         case Protocol::FTP:
         {
-            FtpWorker::scaner_FTP([this](const GroupTask& gr_task) {
+            status=FtpWorker::scaner_FTP([this](const GroupTask& gr_task) {
                 this->process_file(gr_task);
                 }, dir);
         }
         break;
         case Protocol::S3:
         {
-            S3Worker::scaner_S3([this](const GroupTask& gr_task) {
+            status=S3Worker::scaner_S3([this](const GroupTask& gr_task) {
                 this->process_file(gr_task);
                 }, dir);
         }
         break;
         }
-        check_completion(id);
+        monitor[id]->is_run.exchange(false);
+        if (!status)
+        {
+            timer_[id]->expires_after(10min);
+            timer_[id]->async_wait([this, id](const boost::system::error_code& ec) {
+                if (!ec) {
+                    check_completion(id);
+                }
+                else {
+                    spdlog::error("Timer error: {}", to_utf8(ec.message()));
+                }
+                });
+        }
+        else
+            check_completion(id);
     }
     
 }

@@ -22,7 +22,7 @@ struct callback_data {
 
 
 
-static struct FtpWorker
+struct FtpWorker
 {
 
     static bool remove(const SimpleTask& task);
@@ -38,7 +38,7 @@ private:
     static size_t read_callback_c(void* ptr, size_t size, size_t nmemb, void* stream);
     static size_t write_callback_list(char* ptr, size_t size, size_t nmemb, void* list);
     static long file_is_coming(struct curl_fileinfo* finfo, struct callback_data* data);
-    static bool recursiv_list_FTP(CURL* curl, CURLcode& res, const std::string& base_url, std::string subfolder, const std::function<void(const GroupTask&)>& func, const TaskParams& dir);
+    static bool recursiv_list_FTP(CURL* curl, CURLcode& res, const std::string& base_url, std::string subfolder, const std::function<void(const GroupTask&)>& func, const TaskParams& dir, int& round_robin, std::optional<RE2>& mask_re2);
     static bool redirect_curl(const SimpleTask& task);
     static bool file_download_curl(const UrlParams& from, const fs::path& source, const fs::path& destination);
 

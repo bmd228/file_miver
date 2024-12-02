@@ -23,13 +23,17 @@ std::shared_ptr<spdlog::logger> init_logger()
     spdlog::set_default_logger(logger);
     return logger;
 }
-
+static std::string enum_to_string(Protocol protocol) {
+    switch (protocol) {
+    case Protocol::DIR:   return "DIR";
+    case Protocol::FTP: return "FTP";
+    case Protocol::S3:  return "S3";
+    default:           return "Unknown";
+    }
+}
 int main() {
     std::shared_ptr<spdlog::logger> logger = init_logger();
-    curl_global_init(CURL_GLOBAL_ALL);
-    Aws::SDKOptions options;
-    //options.loggingOptions.logLevel = Aws::Utils::Logging::LogLevel::Trace;
-    Aws::InitAPI(options);
+
     boost::asio::io_context io;
 //Обязательно все директории должны заканчиваться на / и добавить провреку на win style и linux style 
     TaskParams one_task, two_task,three_task, four_task,five_task, six_task,seven_task;
@@ -38,7 +42,7 @@ int main() {
     one_task.recursiv = true;
     one_task.file_mode = FileMode::COPY;
 
-    two_task.from = UrlParams(fs::path("D:\\test\\1\\"), Protocol::DIR, std::nullopt);
+    two_task.from = UrlParams(fs::path("D:\\test\\1\\242424"), Protocol::DIR, std::nullopt);
     two_task.to = { UrlParams(fs::path("D:\\test\\2\\"), Protocol::DIR, std::nullopt),UrlParams(fs::path("/test/"), Protocol::FTP, std::nullopt,"keenetic-0771","user:user") };
     two_task.add_to("", Protocol::S3, std::nullopt, "http://localhost:9000", std::nullopt, "x6poJxUuRH14X7Co4aEz", "mCpPWDIYBzKC2mM8TIhqEnrWrjzspNPUnulIT2Yo", "/rabbit");
     two_task.recursiv = true;
@@ -69,22 +73,40 @@ int main() {
     seven_task.recursiv = true;
     seven_task.file_mode = FileMode::COPY;
 
-    std::chrono::seconds interval = 1s; // Интервал между запусками сканирования
 
-    DirectoryScanner scanner(io, { two_task,seven_task }, interval);
+
+    DirectoryScanner scanner( { two_task,seven_task });
     scanner.start();
+    auto pair_id = scanner.get_id_params();
+    while (true)
+    {
+        for (const auto& dir : scanner.monitor)
+        {
+            fmt::print("RUN:{} {}:{} COMPLITE:{} ERROR:{} \r\n", dir.second->is_run.load(), enum_to_string(pair_id[dir.first].from.protocol), pair_id[dir.first].from.path.u8string(), dir.second->sucsess.load(), dir.second->error.load());
+        }
+        std::this_thread::sleep_for(1s);
+    }
+    
+    //while (true) {
+    //    //std::cout << "> ";
 
+    //    //if (!std::getline(std::cin, input)) { // Обработка EOF
+    //    //    scanner.stop();
+    //    //    std::cout << "\nCtrl+Z/Ctrl+D обнаружен. Завершаем работу...\n";
+    //    //    break;
+    //    //}
+    //}
+
+    //std::cout << "Scanner stopped.\n";
+    
     // Запуск io_context в пуле потоков
-    std::vector<std::thread> threads;
-    const int num_threads = std::thread::hardware_concurrency();
-    for (int i = 0; i < num_threads; ++i) {
-        threads.emplace_back([&io]() { io.run(); });
-    }
+  //  std::vector<std::thread> threads;
+   // const int num_threads = std::thread::hardware_concurrency();
+    //for (int i = 0; i < std::thread::hardware_concurrency(); ++i) {
+    //    threads.emplace_back([&io]() { io.run(); });
+    //}
 
-    for (auto& thread : threads) {
-        thread.join();
-    }
-    curl_global_cleanup();
-    Aws::ShutdownAPI(options);
+    
+
     return 0;
 }

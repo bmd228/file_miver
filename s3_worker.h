@@ -27,7 +27,7 @@
 #include <fstream>
 #include "task_params.h"
 #include "ftp_worker.h"
-static struct S3Worker
+struct S3Worker
 {
 	static bool scaner_S3(const std::function<void(const GroupTask&)>& func, const TaskParams&);
 	static bool s3_to_fs(const SimpleTask& task, const bool& only_move);

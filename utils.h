@@ -5,6 +5,7 @@
 #endif // WIN32
 #include <random>
 
+
 static inline  std::string to_utf8(const std::string& str) {
 #ifdef WIN32
 	// Преобразуем строку из локальной кодировки (CP_ACP) в std::wstring
@@ -20,7 +21,7 @@ static inline  std::string to_utf8(const std::string& str) {
 
 	return utf8_str;
 }
-static size_t generateRandom() {
+static size_t generate_random() {
 	// Инициализаци генератора случайных чисел
 	std::random_device rd;              // Источник случайности
 	std::mt19937_64 gen(rd());          // Генератор случайных чисел (Mersenne Twister, 64-битный)
@@ -35,3 +36,13 @@ static size_t generateRandom() {
 	size_t random_number = dist(gen);
 	return random_number;
 }
+
+
+
+struct Monitor
+{
+	std::atomic_bool is_run{ false };
+	std::atomic_size_t sucsess{ 0 };
+	std::atomic_size_t error{ 0 };
+
+};

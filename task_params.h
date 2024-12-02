@@ -17,6 +17,7 @@ enum Protocol
 	FTP = 1,
 	S3 = 2,
 };
+
 enum StateController
 {
 	BLOCK = 0,
@@ -53,7 +54,7 @@ struct UrlParams
 struct TaskParams
 {
 	TaskParams() {
-		id = generateRandom();
+		id = generate_random();
 	}
 	~TaskParams() = default;
 
@@ -74,7 +75,7 @@ struct TaskParams
 		from= UrlParams(path, protocol, std::move(mask), std::move(entrypoint), std::move(ftp_user_password),
 			std::move(access_key), std::move(secret_key), std::move(bucket), is_security);
 		if(id==0)
-			id = generateRandom();
+			id = generate_random();
 	}
 	void add_to(const fs::path& path,
 		Protocol protocol = Protocol::DIR,
